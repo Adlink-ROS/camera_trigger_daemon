@@ -1,12 +1,13 @@
 """Generic linux daemon base class for python 3.x."""
 
+import mraa
 import sys
 import os
 import time
 import atexit
 import signal
-sys.path.append("/opt/adlink/neuron-sdk/neuron-library/lib/python3.6/dist-packages")
-import mraa
+sys.path.append(
+    "/opt/adlink/neuron-sdk/neuron-library/lib/python3.6/dist-packages")
 
 
 class daemon:
@@ -14,7 +15,7 @@ class daemon:
 
     Usage: subclass the daemon class and override the run() method."""
 
-    def __init__(self, pidfile, gpio_pin, uart_port, 
+    def __init__(self, pidfile, gpio_pin, uart_port,
                  stdin='/dev/null', stdout='/home/ros/camera_trigger_daemon/test.txt', stderr='/dev/null',):
         # daemon
         self.pidfile = pidfile
@@ -33,11 +34,12 @@ class daemon:
         self.cam4 = 53
         self.data = []
         self.tmp = []
+        self.count = 0
 
         # trigger time
-        self.hz = 10
-        self.interval = 1/self.hz
+        self.hz = 10*3
         self.min_fsync_interval = 0.005
+        self.interval = (1-self.min_fsync_interval*3)/self.hz
         self.wait_idle = self.interval - self.min_fsync_interval
 
     def daemonize(self):
@@ -153,37 +155,56 @@ class daemon:
         It will be called after the process has been daemonized by
         start() or restart()."""
 
-        
-        def isr_routine(x):
+        def isr_routine(self):
             """Triggers ISR upon GPIO state change."""
-            # x.ti=time.time() 
+            # self.ti=time.time()
 
             # get the pin(isr) value
-            # print("pin " + repr(x.gpio.getPin(True)) + " = " + repr(x.gpio.read()),flush=True)
+            # print("pin " + repr(self.gpio.getPin(True)) + " = " + repr(self.gpio.read()),flush=True)
 
             # receive the GNSS data from uart
-            if x.uart.dataAvailable():
-                x.tmp = x.uart.readStr(10000).split("\n")
-                x.data.append(x.tmp[0])
-                if len(x.data) >10:
-                    x.data=x.data[1:]
-                    #print(x.data,flush=True)
+
+            self.data.append(time.ctime())
+            self.count += 1
 
             # trigger the cameras
-            for i in range(x.hz -1):
-                x.cam1.write(1)
-                x.cam2.write(1)
-                x.cam3.write(1)
-                x.cam4.write(1)
-                time.sleep(x.min_fsync_interval)
-                x.cam1.write(0)
-                x.cam2.write(0)
-                x.cam3.write(0)
-                x.cam4.write(0)
-                time.sleep(x.wait_idle)
-            # x.to=time.time()
-            # print(x.to-x.ti)
+            for i in range(self.hz - 1):
+                self.cam1.write(1)
+                self.cam2.write(1)
+                self.cam3.write(1)
+                self.cam4.write(1)
+                time.sleep(self.min_fsync_interval)
+                self.cam1.write(0)
+                self.cam2.write(0)
+                self.cam3.write(0)
+                self.cam4.write(0)
+                time.sleep(self.wait_idle)
+            self.cam1.write(1)
+            self.cam2.write(1)
+            self.cam3.write(1)
+            self.cam4.write(1)
+            time.sleep(self.min_fsync_interval)
+            self.cam1.write(0)
+            self.cam2.write(0)
+            self.cam3.write(0)
+            self.cam4.write(0)
+            # self.to=time.time()
+            # print(self.to-self.ti)
 
+        def uart_timestamp(self):
+            '''Read timestamp from uart and setting system time'''
+            # flush uart inbound
+            self.tmp = self.uart.readStr(10000)
+            # receive the GNSS data from uart
+            while not self.uart.dataAvailable():
+                time.sleep(0.005)
+            self.tmp = self.uart.readStr(10000).split("\n")[1].split(",")[1]
+            # setting system time by timedatectl set-time "18:10:40"
+            # print(self.tmp[0] + self.tmp[1] + ":" + self.tmp[2] + self.tmp[3] + ":" + self.tmp[4] + self.tmp[5])
+            os.popen("timedatectl set-ntp false").readlines
+            os.popen("timedatectl set-time " + self.tmp[0] + self.tmp[1] + ":" +
+                     self.tmp[2] + self.tmp[3] + ":" + self.tmp[4] + self.tmp[5]).readlines()
+            # print(time.ctime())
 
         try:
             """ Initialise """
@@ -213,23 +234,29 @@ class daemon:
             time.sleep(0.05)
             self.uart.setFlowcontrol(False, False)
             time.sleep(0.05)
-            
+
             # set direction and edge types for interrupt
             self.gpio.dir(mraa.DIR_IN)
             time.sleep(0.05)
             self.gpio.isr(mraa.EDGE_RISING, isr_routine, self)
             time.sleep(0.05)
-            
+
             print("Starting ISR for pin " + repr(self.gpio.getPin(True)))
-            
-            # wait for isr
+
+            uart_timestamp(self)
+
             while True:
-                if self.uart.dataAvailable():
-                    self.tmp = self.uart.readStr(10000) 
+                """waitting for isr."""
+                self.tmp = self.uart.readStr(10000)
                 time.sleep(0.05)
 
-                # save the timestamp list to txt file
+                if self.count == 10:
+                    uart_timestamp(self)
+                    self.count = 0
+
                 with open("/home/ros/camera_trigger_daemon/timestamp.txt", "w") as file:
+                    if len(self.data) > 10:
+                        self.data = self.data[1:]
                     file.write("\n".join(self.data))
 
         except ValueError as e:
@@ -238,9 +265,9 @@ class daemon:
 
 if __name__ == "__main__":
 
-    # set daemon : pidfile, gpio_pin(isr), uart_port, led_num
+    # set daemon : pidfile, gpio_pin(isr), uart_port
     MyDaemon = daemon('/tmp/daemon-example.pid', 5, '/dev/ttyUSB4')
-    
+
     if len(sys.argv) == 2:
         if 'start' == sys.argv[1]:
             MyDaemon.start()
