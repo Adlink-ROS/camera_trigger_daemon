@@ -1,13 +1,13 @@
 """Generic linux daemon base class for python 3.x."""
 
-import mraa
 import sys
+sys.path.append("/opt/adlink/neuron-sdk/neuron-library/lib/python3.6/dist-packages")
+import mraa
 import os
 import time
 import atexit
 import signal
-sys.path.append(
-    "/opt/adlink/neuron-sdk/neuron-library/lib/python3.6/dist-packages")
+import pika
 
 
 class daemon:
@@ -28,12 +28,14 @@ class daemon:
         self.gpio = gpio_pin
         self.uart = uart_port
         # every deserializer MAX9296 is mapped to a GPIO from Xavier.
-        self.cam1 = 50
-        self.cam2 = 51
-        self.cam3 = 52
-        self.cam4 = 53
-        self.data = []
+        self.cam1 = 51
+        self.cam2 = 52
+        self.cam3 = 53
+        self.cam4 = 54
+
+        self.data = ""
         self.tmp = []
+        self.tmp2 = ""
         self.count = 0
 
         # trigger time
@@ -146,25 +148,57 @@ class daemon:
         self.stop()
         self.start()
 
-    # inside a python interrupt you cannot use 'basic' types so you'll need to use
-    # objects
+    def message_queue(self):
+        """Creat a message queue."""
+        self.connection = pika.BlockingConnection(
+            pika.ConnectionParameters(host='localhost'))
+        self.channel = self.connection.channel()
+        # 宣告一個名為 'timestamp' 的訊息佇列
+        self.channel.queue_declare(queue='timestamp')
+
+    def send(self):
+        """Send the message to queue."""
+        self.channel.basic_publish(
+            exchange='', routing_key='timestamp', body=self.data)
+
+    def receive(self):
+        """Receive the message form quese."""
+        def callback(ch, method, properties, body):
+            print(f" [x] Received {body}")
+            # 每次成功 cossume 都會 popout
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+
+        self.channel.basic_consume(
+            'timestamp', callback)  # 宣告消費來自 timestamp 的訊息
+        self.channel.start_consuming()
+
+    def timestamp(self):
+        """Start get the timestamp form quees."""
+        self.message_queue()
+        self.receive()
+
+    def uart_timestamp(self):
+        """Read timestamp from uart and setting system time"""
+        # flush uart inbound
+        self.tmp = self.uart.readStr(10000)
+
+        # receive the GNSS data from uart
+        while not self.uart.dataAvailable():
+            time.sleep(0.005)
+        self.tmp = self.uart.readStr(10000).split("\n")[1].split(",")[1]
+
+        # setting system time by timedatectl set-time "18:10:40"
+        os.popen("timedatectl set-ntp false").readlines
+        os.popen("timedatectl set-time " + self.tmp[0] + self.tmp[1] + ":" +
+                 self.tmp[2] + self.tmp[3] + ":" + self.tmp[4] + self.tmp[5]).readlines()
 
     def run(self):
-        """You should override this method when you subclass Daemon.
-
-        It will be called after the process has been daemonized by
-        start() or restart()."""
 
         def isr_routine(self):
-            """Triggers ISR upon GPIO state change."""
+            """Tigger Cameras and save timestamp."""
             # self.ti=time.time()
-
-            # get the pin(isr) value
-            # print("pin " + repr(self.gpio.getPin(True)) + " = " + repr(self.gpio.read()),flush=True)
-
-            # receive the GNSS data from uart
-
-            self.data.append(time.ctime())
+            # get the current system time
+            self.tmp2 = time.ctime()
             self.count += 1
 
             # trigger the cameras
@@ -191,26 +225,17 @@ class daemon:
             # self.to=time.time()
             # print(self.to-self.ti)
 
-        def uart_timestamp(self):
-            '''Read timestamp from uart and setting system time'''
-            # flush uart inbound
-            self.tmp = self.uart.readStr(10000)
-            # receive the GNSS data from uart
-            while not self.uart.dataAvailable():
-                time.sleep(0.005)
-            self.tmp = self.uart.readStr(10000).split("\n")[1].split(",")[1]
-            # setting system time by timedatectl set-time "18:10:40"
-            # print(self.tmp[0] + self.tmp[1] + ":" + self.tmp[2] + self.tmp[3] + ":" + self.tmp[4] + self.tmp[5])
-            os.popen("timedatectl set-ntp false").readlines
-            os.popen("timedatectl set-time " + self.tmp[0] + self.tmp[1] + ":" +
-                     self.tmp[2] + self.tmp[3] + ":" + self.tmp[4] + self.tmp[5]).readlines()
-            # print(time.ctime())
-
         try:
             """ Initialise """
             # initialise GPIO
             self.gpio = mraa.Gpio(self.gpio)
             time.sleep(0.05)
+            # set direction and edge types for interrupt
+            self.gpio.dir(mraa.DIR_IN)
+            time.sleep(0.05)
+            self.gpio.isr(mraa.EDGE_RISING, isr_routine, self)
+            time.sleep(0.05)
+
             # initialise Cameras
             self.cam1 = mraa.Gpio(self.cam1)
             self.cam2 = mraa.Gpio(self.cam2)
@@ -226,7 +251,6 @@ class daemon:
             # initialise UART
             self.uart = mraa.Uart(self.uart)
             time.sleep(0.05)
-
             # set UART parameters
             self.uart.setBaudRate(115200)
             time.sleep(0.05)
@@ -235,15 +259,13 @@ class daemon:
             self.uart.setFlowcontrol(False, False)
             time.sleep(0.05)
 
-            # set direction and edge types for interrupt
-            self.gpio.dir(mraa.DIR_IN)
-            time.sleep(0.05)
-            self.gpio.isr(mraa.EDGE_RISING, isr_routine, self)
-            time.sleep(0.05)
-
             print("Starting ISR for pin " + repr(self.gpio.getPin(True)))
 
-            uart_timestamp(self)
+            # initialise message queue
+            self.message_queue()
+
+            # setting systeam time
+            self.uart_timestamp()
 
             while True:
                 """waitting for isr."""
@@ -251,13 +273,13 @@ class daemon:
                 time.sleep(0.05)
 
                 if self.count == 10:
-                    uart_timestamp(self)
+                    self.uart_timestamp()
                     self.count = 0
 
-                with open("/home/ros/camera_trigger_daemon/timestamp.txt", "w") as file:
-                    if len(self.data) > 10:
-                        self.data = self.data[1:]
-                    file.write("\n".join(self.data))
+                # send the timestamp
+                if self.tmp2 != self.data:
+                    self.data = self.tmp2
+                    self.send()
 
         except ValueError as e:
             print(e)
@@ -266,7 +288,7 @@ class daemon:
 if __name__ == "__main__":
 
     # set daemon : pidfile, gpio_pin(isr), uart_port
-    MyDaemon = daemon('/tmp/daemon-example.pid', 5, '/dev/ttyUSB4')
+    MyDaemon = daemon('/tmp/daemon-example.pid', 5, '/dev/ttyUSB0')
 
     if len(sys.argv) == 2:
         if 'start' == sys.argv[1]:
@@ -275,10 +297,12 @@ if __name__ == "__main__":
             MyDaemon.stop()
         elif 'restart' == sys.argv[1]:
             MyDaemon.restart()
+        elif 'timestamp' == sys.argv[1]:
+            MyDaemon.timestamp()
         else:
             print("Unknown command")
             sys.exit(2)
         sys.exit(0)
     else:
-        print("usage: %s start|stop|restart" % sys.argv[0])
+        print("usage: %s start|stop|restart|timestamp" % sys.argv[0])
         sys.exit(2)
