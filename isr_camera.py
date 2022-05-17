@@ -7,7 +7,6 @@ import os
 import time
 import atexit
 import signal
-import pika
 
 
 class daemon:
@@ -15,8 +14,8 @@ class daemon:
 
     Usage: subclass the daemon class and override the run() method."""
 
-    def __init__(self, pidfile, gpio_pin, uart_port,
-                 stdin='/dev/null', stdout='/home/ros/camera_trigger_daemon/test.txt', stderr='/dev/null',):
+    def __init__(self, pidfile, gpio_pin, hz,
+                 stdin='/dev/null', stdout='/home/ros/camera_trigger_daemon/daemon.log', stderr='/dev/null',):
         # daemon
         self.pidfile = pidfile
         self.stdin = stdin
@@ -26,20 +25,14 @@ class daemon:
 
         # mraa
         self.gpio = gpio_pin
-        self.uart = uart_port
         # every deserializer MAX9296 is mapped to a GPIO from Xavier.
         self.cam1 = 51
         self.cam2 = 52
         self.cam3 = 53
         self.cam4 = 54
 
-        self.data = ""
-        self.tmp = []
-        self.tmp2 = ""
-        self.count = 0
-
         # trigger time
-        self.hz = 10*3
+        self.hz = hz
         self.min_fsync_interval = 0.005
         self.interval = (1-self.min_fsync_interval*3)/self.hz
         self.wait_idle = self.interval - self.min_fsync_interval
@@ -113,6 +106,27 @@ class daemon:
         self.daemonize()
         self.run()
 
+    def start_free(self):
+        """Start the daemon."""
+
+        # Check for a pidfile to see if the daemon already runs
+        try:
+            with open(self.pidfile, 'r') as pf:
+
+                pid = int(pf.read().strip())
+        except IOError:
+            pid = None
+
+        if pid:
+            message = "pidfile {0} already exist. " + \
+                "Daemon already running?\n"
+            sys.stderr.write(message.format(self.pidfile))
+            sys.exit(1)
+
+        # Start the daemon
+        self.daemonize()
+        self.run_free()
+
     def stop(self):
         """Stop the daemon."""
 
@@ -145,61 +159,14 @@ class daemon:
 
     def restart(self):
         """Restart the daemon."""
+
         self.stop()
         self.start()
-
-    def message_queue(self):
-        """Creat a message queue."""
-        self.connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host='localhost'))
-        self.channel = self.connection.channel()
-        # 宣告一個名為 'timestamp' 的訊息佇列
-        self.channel.queue_declare(queue='timestamp')
-
-    def send(self):
-        """Send the message to queue."""
-        self.channel.basic_publish(
-            exchange='', routing_key='timestamp', body=self.data)
-
-    def receive(self):
-        """Receive the message form quese."""
-        def callback(ch, method, properties, body):
-            print(f" [x] Received {body}")
-            # 每次成功 cossume 都會 popout
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-
-        self.channel.basic_consume(
-            'timestamp', callback)  # 宣告消費來自 timestamp 的訊息
-        self.channel.start_consuming()
-
-    def timestamp(self):
-        """Start get the timestamp form quees."""
-        self.message_queue()
-        self.receive()
-
-    def uart_timestamp(self):
-        """Read timestamp from uart and setting system time"""
-        # flush uart inbound
-        self.tmp = self.uart.readStr(10000)
-
-        # receive the GNSS data from uart
-        while not self.uart.dataAvailable():
-            time.sleep(0.005)
-        self.tmp = self.uart.readStr(10000).split("\n")[1].split(",")[1]
-
-        # setting system time by timedatectl set-time "18:10:40"
-        os.popen("timedatectl set-ntp false").readlines
-        os.popen("timedatectl set-time " + self.tmp[0] + self.tmp[1] + ":" +
-                 self.tmp[2] + self.tmp[3] + ":" + self.tmp[4] + self.tmp[5]).readlines()
 
     def run(self):
 
         def isr_routine(self):
-            """Tigger Cameras and save timestamp."""
-            # self.ti=time.time()
-            # get the current system time
-            self.tmp2 = time.ctime()
-            self.count += 1
+            """Tigger Cameras."""
 
             # trigger the cameras
             for i in range(self.hz - 1):
@@ -222,19 +189,9 @@ class daemon:
             self.cam2.write(0)
             self.cam3.write(0)
             self.cam4.write(0)
-            # self.to=time.time()
-            # print(self.to-self.ti)
 
         try:
             """ Initialise """
-            # initialise GPIO
-            self.gpio = mraa.Gpio(self.gpio)
-            time.sleep(0.05)
-            # set direction and edge types for interrupt
-            self.gpio.dir(mraa.DIR_IN)
-            time.sleep(0.05)
-            self.gpio.isr(mraa.EDGE_RISING, isr_routine, self)
-            time.sleep(0.05)
 
             # initialise Cameras
             self.cam1 = mraa.Gpio(self.cam1)
@@ -248,38 +205,57 @@ class daemon:
             self.cam4.dir(mraa.DIR_OUT)
             time.sleep(0.05)
 
-            # initialise UART
-            self.uart = mraa.Uart(self.uart)
+            # initialise GPIO
+            self.gpio = mraa.Gpio(self.gpio)
             time.sleep(0.05)
-            # set UART parameters
-            self.uart.setBaudRate(115200)
+            # set direction and edge types for interrupt
+            self.gpio.dir(mraa.DIR_IN)
             time.sleep(0.05)
-            self.uart.setMode(8, mraa.UART_PARITY_NONE, 1)
-            time.sleep(0.05)
-            self.uart.setFlowcontrol(False, False)
+            self.gpio.isr(mraa.EDGE_RISING, isr_routine, self)
             time.sleep(0.05)
 
             print("Starting ISR for pin " + repr(self.gpio.getPin(True)))
 
-            # initialise message queue
-            self.message_queue()
-
-            # setting systeam time
-            self.uart_timestamp()
-
             while True:
+
                 """waitting for isr."""
-                self.tmp = self.uart.readStr(10000)
                 time.sleep(0.05)
 
-                if self.count == 10:
-                    self.uart_timestamp()
-                    self.count = 0
+        except ValueError as e:
+            print(e)
 
-                # send the timestamp
-                if self.tmp2 != self.data:
-                    self.data = self.tmp2
-                    self.send()
+    def run_free(self):
+
+        try:
+            """ Initialise """
+
+            # initialise Cameras
+            self.cam1 = mraa.Gpio(self.cam1)
+            self.cam2 = mraa.Gpio(self.cam2)
+            self.cam3 = mraa.Gpio(self.cam3)
+            self.cam4 = mraa.Gpio(self.cam4)
+            time.sleep(0.05)
+            self.cam1.dir(mraa.DIR_OUT)
+            self.cam2.dir(mraa.DIR_OUT)
+            self.cam3.dir(mraa.DIR_OUT)
+            self.cam4.dir(mraa.DIR_OUT)
+            time.sleep(0.05)
+
+            while True:
+                """Tigger Cameras."""
+
+                # trigger the cameras
+                for i in range(self.hz):
+                    self.cam1.write(1)
+                    self.cam2.write(1)
+                    self.cam3.write(1)
+                    self.cam4.write(1)
+                    time.sleep(self.min_fsync_interval)
+                    self.cam1.write(0)
+                    self.cam2.write(0)
+                    self.cam3.write(0)
+                    self.cam4.write(0)
+                    time.sleep(self.wait_idle)
 
         except ValueError as e:
             print(e)
@@ -287,8 +263,8 @@ class daemon:
 
 if __name__ == "__main__":
 
-    # set daemon : pidfile, gpio_pin(isr), uart_port
-    MyDaemon = daemon('/tmp/daemon-example.pid', 5, '/dev/ttyUSB0')
+    # set daemon : pidfile, gpio_pin(isr), hz
+    MyDaemon = daemon('/tmp/daemon-example.pid', 5, 20)
 
     if len(sys.argv) == 2:
         if 'start' == sys.argv[1]:
@@ -297,12 +273,14 @@ if __name__ == "__main__":
             MyDaemon.stop()
         elif 'restart' == sys.argv[1]:
             MyDaemon.restart()
-        elif 'timestamp' == sys.argv[1]:
-            MyDaemon.timestamp()
+        elif 'start_free' == sys.argv[1]:
+            MyDaemon.start_free()
         else:
             print("Unknown command")
             sys.exit(2)
         sys.exit(0)
+
     else:
-        print("usage: %s start|stop|restart|timestamp" % sys.argv[0])
+        print("usage: %s start|stop|restart|start_free" % sys.argv[0])
         sys.exit(2)
+        
