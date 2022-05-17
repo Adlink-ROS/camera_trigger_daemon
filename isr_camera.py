@@ -263,10 +263,13 @@ class daemon:
 
 if __name__ == "__main__":
 
-    # set daemon : pidfile, gpio_pin(isr), hz
-    MyDaemon = daemon('/tmp/daemon-example.pid', 5, 20)
+    hz = 5 if len(sys.argv) < 3 else int(sys.argv[2])
+    gpio_pin = 5 if len(sys.argv) < 4 else int(sys.argv[3])
 
-    if len(sys.argv) == 2:
+    # set daemon : pidfile, gpio_pin(isr), hz
+    MyDaemon = daemon('/tmp/daemon-example.pid', gpio_pin, hz)
+
+    if len(sys.argv) >= 2:
         if 'start' == sys.argv[1]:
             MyDaemon.start()
         elif 'stop' == sys.argv[1]:

@@ -72,10 +72,17 @@ The daemon provides four function:
 * Restart : stop and then start.
 * Start_free : trigger cameras without external signal.
 
+Default option: 
+
+* GPIO(ISR) = 5 pin
+* trigger hz = 5 hz
+
 ### To start the daemon
 
 ```bash
 sudo python3 isr_camera.py start
+# Otherwise, trigger cameras by 10 hz and setting GPIO: 6 pin to interrupt.
+sudo python3 isr_camera.py start 10 6
 ```
 
 ### To stop the daemon
@@ -94,6 +101,8 @@ sudo python3 isr_camera.py restart
 
 ```bash
 sudo python3 isr_camera.py start_free
+# Otherwise, trigger cameras by 10 hz.
+sudo python3 isr_camera.py start_free 10
 ```
 
 ## Warning
