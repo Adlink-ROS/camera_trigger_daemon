@@ -12,9 +12,8 @@ class Camera:
     def __init__(self, hz, gpio_pin = None):
         self.hz = hz
         self.gpio_pin = gpio_pin
-        # TODO: Suggest to add comment here for how to get this number
-        self.interval = (1-self.min_fsync_interval*3)/self.hz
-        self.wait_idle = self.interval - self.min_fsync_interval
+        self.min_fsync_interval = 0.005
+        self.interval = 1 / self.hz
         # Initialize camera list
         self.cameras = []
         try:
@@ -31,18 +30,17 @@ class Camera:
 
         def isr_routine(self):
             # trigger the cameras
-            for i in range(self.hz - 1):
+            for i in range(self.hz):
+                t1 = time.time()
                 for cam in self.cameras:
-                    self.cam.write(1)
+                    cam.write(1)
                 time.sleep(self.min_fsync_interval)
                 for cam in self.cameras:
-                    self.cam.write(0)
-                time.sleep(self.wait_idle)
-            for cam in self.cameras:
-                self.cam.write(1)
-            time.sleep(self.min_fsync_interval)
-            for cam in self.cameras:
-                self.cam.write(0)
+                    cam.write(0)
+                t2 = time.time()
+                # Ignore the last sleep time
+                if (i != self.hz-1):
+                    time.sleep(self.interval - (t2 - t1))
 
         try:
             # Receive GPIO in and trigger camera
@@ -64,12 +62,14 @@ class Camera:
             else:
                 while True:
                     for i in range(self.hz):
+                        t1 = time.time()
                         for cam in self.cameras:
-                            self.cam.write(1)
+                            cam.write(1)
                         time.sleep(self.min_fsync_interval)
                         for cam in self.cameras:
-                            self.cam.write(0)
-                        time.sleep(self.wait_idle)
+                            cam.write(0)
+                        t2 = time.time()
+                        time.sleep(self.interval - (t2 - t1))
         except ValueError as e:
             print(e)
 
@@ -215,6 +215,7 @@ if __name__ == "__main__":
     # set daemon : pidfile, gpio_pin(isr), hz
     MyDaemon = daemon('/tmp/daemon-example.pid', gpio_pin, hz)
 
+    # TODO: Add the configuration of frame sync / free run mode
     if len(sys.argv) >= 2:
         if 'start' == sys.argv[1]:
             camera = Camera(hz, gpio_pin)
