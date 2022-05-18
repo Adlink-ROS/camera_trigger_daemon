@@ -8,6 +8,70 @@ import time
 import atexit
 import signal
 
+class Camera:
+    def __init__(self, hz, gpio_pin = None):
+        self.hz = hz
+        self.gpio_pin = gpio_pin
+        self.interval = (1-self.min_fsync_interval*3)/self.hz
+        self.wait_idle = self.interval - self.min_fsync_interval
+        # Initialize camera list
+        self.cameras = []
+        try:
+            for n in range(51, 55): # from 51 to 54
+                cam = mraa.Gpio(n)
+                time.sleep(0.05)
+                cam.dir(mraa.DIR_OUT)
+                time.sleep(0.05)
+                self.cameras.append(cam)
+        except ValueError as e:
+            print(e)
+
+    def run(self):
+
+        def isr_routine(self):
+            # trigger the cameras
+            for i in range(self.hz - 1):
+                for cam in self.cameras:
+                    self.cam.write(1)
+                time.sleep(self.min_fsync_interval)
+                for cam in self.cameras:
+                    self.cam.write(0)
+                time.sleep(self.wait_idle)
+            for cam in self.cameras:
+                self.cam.write(1)
+            time.sleep(self.min_fsync_interval)
+            for cam in self.cameras:
+                self.cam.write(0)
+
+        try:
+            # Receive GPIO in and trigger camera
+            if (self.gpio_pin != None):
+                # Receive GPIO in interrupte
+                self.gpio = mraa.Gpio(self.gpio_pin)
+                time.sleep(0.05)
+                self.gpio.dir(mraa.DIR_IN)
+                time.sleep(0.05)
+                self.gpio.isr(mraa.EDGE_RISING, isr_routine, self)
+                time.sleep(0.05)
+
+                print("Starting ISR for pin " + repr(self.gpio.getPin(True)))
+
+                while True:
+                    """waitting for isr."""
+                    time.sleep(0.05)
+            # Trigger camera directly
+            else:
+                while True:
+                    for i in range(self.hz):
+                        for cam in self.cameras:
+                            self.cam.write(1)
+                        time.sleep(self.min_fsync_interval)
+                        for cam in self.cameras:
+                            self.cam.write(0)
+                        time.sleep(self.wait_idle)
+        except ValueError as e:
+            print(e)
+
 
 class daemon:
     """A generic daemon class.
@@ -22,20 +86,6 @@ class daemon:
         self.stdout = stdout
         self.stderr = stderr
         self.pidfile = pidfile
-
-        # mraa
-        self.gpio = gpio_pin
-        # every deserializer MAX9296 is mapped to a GPIO from Xavier.
-        self.cam1 = 51
-        self.cam2 = 52
-        self.cam3 = 53
-        self.cam4 = 54
-
-        # trigger time
-        self.hz = hz
-        self.min_fsync_interval = 0.005
-        self.interval = (1-self.min_fsync_interval*3)/self.hz
-        self.wait_idle = self.interval - self.min_fsync_interval
 
     def daemonize(self):
         """Deamonize class. UNIX double fork mechanism."""
@@ -85,7 +135,7 @@ class daemon:
     def delpid(self):
         os.remove(self.pidfile)
 
-    def start(self):
+    def start(self, camera):
         """Start the daemon."""
 
         # Check for a pidfile to see if the daemon already runs
@@ -104,28 +154,7 @@ class daemon:
 
         # Start the daemon
         self.daemonize()
-        self.run()
-
-    def start_free(self):
-        """Start the daemon."""
-
-        # Check for a pidfile to see if the daemon already runs
-        try:
-            with open(self.pidfile, 'r') as pf:
-
-                pid = int(pf.read().strip())
-        except IOError:
-            pid = None
-
-        if pid:
-            message = "pidfile {0} already exist. " + \
-                "Daemon already running?\n"
-            sys.stderr.write(message.format(self.pidfile))
-            sys.exit(1)
-
-        # Start the daemon
-        self.daemonize()
-        self.run_free()
+        camera.run()
 
     def stop(self):
         """Stop the daemon."""
@@ -163,127 +192,28 @@ class daemon:
         self.stop()
         self.start()
 
-    def run(self):
-
-        def isr_routine(self):
-            """Tigger Cameras."""
-
-            # trigger the cameras
-            for i in range(self.hz - 1):
-                self.cam1.write(1)
-                self.cam2.write(1)
-                self.cam3.write(1)
-                self.cam4.write(1)
-                time.sleep(self.min_fsync_interval)
-                self.cam1.write(0)
-                self.cam2.write(0)
-                self.cam3.write(0)
-                self.cam4.write(0)
-                time.sleep(self.wait_idle)
-            self.cam1.write(1)
-            self.cam2.write(1)
-            self.cam3.write(1)
-            self.cam4.write(1)
-            time.sleep(self.min_fsync_interval)
-            self.cam1.write(0)
-            self.cam2.write(0)
-            self.cam3.write(0)
-            self.cam4.write(0)
-
-        try:
-            """ Initialise """
-
-            # initialise Cameras
-            self.cam1 = mraa.Gpio(self.cam1)
-            self.cam2 = mraa.Gpio(self.cam2)
-            self.cam3 = mraa.Gpio(self.cam3)
-            self.cam4 = mraa.Gpio(self.cam4)
-            time.sleep(0.05)
-            self.cam1.dir(mraa.DIR_OUT)
-            self.cam2.dir(mraa.DIR_OUT)
-            self.cam3.dir(mraa.DIR_OUT)
-            self.cam4.dir(mraa.DIR_OUT)
-            time.sleep(0.05)
-
-            # initialise GPIO
-            self.gpio = mraa.Gpio(self.gpio)
-            time.sleep(0.05)
-            # set direction and edge types for interrupt
-            self.gpio.dir(mraa.DIR_IN)
-            time.sleep(0.05)
-            self.gpio.isr(mraa.EDGE_RISING, isr_routine, self)
-            time.sleep(0.05)
-
-            print("Starting ISR for pin " + repr(self.gpio.getPin(True)))
-
-            while True:
-
-                """waitting for isr."""
-                time.sleep(0.05)
-
-        except ValueError as e:
-            print(e)
-
-    def run_free(self):
-
-        try:
-            """ Initialise """
-
-            # initialise Cameras
-            self.cam1 = mraa.Gpio(self.cam1)
-            self.cam2 = mraa.Gpio(self.cam2)
-            self.cam3 = mraa.Gpio(self.cam3)
-            self.cam4 = mraa.Gpio(self.cam4)
-            time.sleep(0.05)
-            self.cam1.dir(mraa.DIR_OUT)
-            self.cam2.dir(mraa.DIR_OUT)
-            self.cam3.dir(mraa.DIR_OUT)
-            self.cam4.dir(mraa.DIR_OUT)
-            time.sleep(0.05)
-
-            while True:
-                """Tigger Cameras."""
-
-                # trigger the cameras
-                for i in range(self.hz):
-                    self.cam1.write(1)
-                    self.cam2.write(1)
-                    self.cam3.write(1)
-                    self.cam4.write(1)
-                    time.sleep(self.min_fsync_interval)
-                    self.cam1.write(0)
-                    self.cam2.write(0)
-                    self.cam3.write(0)
-                    self.cam4.write(0)
-                    time.sleep(self.wait_idle)
-
-        except ValueError as e:
-            print(e)
-
 
 if __name__ == "__main__":
 
     hz = 5 if len(sys.argv) < 3 else int(sys.argv[2])
-    gpio_pin = 5 if len(sys.argv) < 4 else int(sys.argv[3])
+    gpio_pin = None if len(sys.argv) < 4 else int(sys.argv[3])
 
     # set daemon : pidfile, gpio_pin(isr), hz
     MyDaemon = daemon('/tmp/daemon-example.pid', gpio_pin, hz)
 
     if len(sys.argv) >= 2:
         if 'start' == sys.argv[1]:
-            MyDaemon.start()
+            camera = Camera(hz, gpio_pin)
+            MyDaemon.start(camera)
         elif 'stop' == sys.argv[1]:
             MyDaemon.stop()
         elif 'restart' == sys.argv[1]:
             MyDaemon.restart()
-        elif 'start_free' == sys.argv[1]:
-            MyDaemon.start_free()
         else:
             print("Unknown command")
             sys.exit(2)
         sys.exit(0)
-
     else:
-        print("usage: %s start|stop|restart|start_free" % sys.argv[0])
+        print("usage: %s start|stop|restart" % sys.argv[0])
         sys.exit(2)
         
