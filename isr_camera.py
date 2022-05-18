@@ -12,6 +12,7 @@ class Camera:
     def __init__(self, hz, gpio_pin = None):
         self.hz = hz
         self.gpio_pin = gpio_pin
+        # TODO: Suggest to add comment here for how to get this number
         self.interval = (1-self.min_fsync_interval*3)/self.hz
         self.wait_idle = self.interval - self.min_fsync_interval
         # Initialize camera list
@@ -194,7 +195,20 @@ class daemon:
 
 
 if __name__ == "__main__":
+    # TODO: Argument definition
+    # ./adlink_camera_sync [mode] [-f freq] [-t gpio_num]
+    # * mode:
+    #   - sync:
+    #     1. set frame sync mode
+    #     2. enable isr daemon
+    #   - free:
+    #     1. disable isr daemon
+    #     2. set free run mode
+    # * While sync mode, supports two options
+    #   -f freq: the trigger frequency (default 5 Hz)
+    #   -t gpio_num: whether triggered by GPIO in
 
+    # TODO: suggest to use Python model argparse to handle the argument
     hz = 5 if len(sys.argv) < 3 else int(sys.argv[2])
     gpio_pin = None if len(sys.argv) < 4 else int(sys.argv[3])
 
