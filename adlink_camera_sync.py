@@ -1,15 +1,18 @@
 """Generic linux daemon base class for python 3.x."""
 
-import sys
-sys.path.append("/opt/adlink/neuron-sdk/neuron-library/lib/python3.6/dist-packages")
-import mraa
-import os
-import time
-import atexit
+import argparse
 import signal
+import atexit
+import time
+import os
+import mraa
+import sys
+sys.path.append(
+    "/opt/adlink/neuron-sdk/neuron-library/lib/python3.6/dist-packages")
+
 
 class Camera:
-    def __init__(self, hz, gpio_pin = None):
+    def __init__(self, hz, gpio_pin=None):
         self.hz = hz
         self.gpio_pin = gpio_pin
         self.min_fsync_interval = 0.005
@@ -17,7 +20,7 @@ class Camera:
         # Initialize camera list
         self.cameras = []
         try:
-            for n in range(51, 55): # from 51 to 54
+            for n in range(51, 55):  # from 51 to 54
                 cam = mraa.Gpio(n)
                 time.sleep(0.05)
                 cam.dir(mraa.DIR_OUT)
@@ -60,6 +63,7 @@ class Camera:
                     time.sleep(0.05)
             # Trigger camera directly
             else:
+                print("Trigger camera directly without ISR.")
                 while True:
                     for i in range(self.hz):
                         t1 = time.time()
@@ -79,7 +83,7 @@ class daemon:
 
     Usage: subclass the daemon class and override the run() method."""
 
-    def __init__(self, pidfile, gpio_pin, hz,
+    def __init__(self, pidfile,
                  stdin='/dev/null', stdout='/home/ros/camera_trigger_daemon/daemon.log', stderr='/dev/null',):
         # daemon
         self.pidfile = pidfile
@@ -187,48 +191,47 @@ class daemon:
                 print(str(err.args))
                 sys.exit(1)
 
-    def restart(self):
+    def restart(self, camera):
         """Restart the daemon."""
 
         self.stop()
-        self.start()
+        self.start(camera)
 
 
 if __name__ == "__main__":
-    # TODO: Argument definition
+    # Argument definition
     # ./adlink_camera_sync [mode] [-f freq] [-t gpio_num]
     # * mode:
     #   - sync:
     #     1. set frame sync mode
-    #     2. enable isr daemon
+    #     2. enable isr if gpio_num != None
+    #     3. enable trigger daemon
     #   - free:
-    #     1. disable isr daemon
+    #     1. disable trigger daemon
     #     2. set free run mode
     # * While sync mode, supports two options
     #   -f freq: the trigger frequency (default 5 Hz)
     #   -t gpio_num: whether triggered by GPIO in
 
-    # TODO: suggest to use Python model argparse to handle the argument
-    hz = 5 if len(sys.argv) < 3 else int(sys.argv[2])
-    gpio_pin = None if len(sys.argv) < 4 else int(sys.argv[3])
+    parser = argparse.ArgumentParser()
+    parser.add_argument('mode', type=str, choices=[
+                        'sync', 'free', 'restart'], help='Camera trigger mode: frame sync / free run mode')
+    parser.add_argument('-f', '--freq', type=int, default='5',  choices=range(1, 21), 
+                        metavar="[1~20]", help='The camera trigger frequency (default 5 Hz)')
+    parser.add_argument('-t', '--gpio_num', type=int, default=None,
+                        required=False, help='Whether triggered by GPIO in (default None)')
+    args = parser.parse_args()
 
     # set daemon : pidfile, gpio_pin(isr), hz
-    MyDaemon = daemon('/tmp/daemon-example.pid', gpio_pin, hz)
+    hz = args.freq
+    gpio_pin = args.gpio_num
+    MyDaemon = daemon('/tmp/daemon-example.pid')
+    camera = Camera(hz, gpio_pin)
 
-    # TODO: Add the configuration of frame sync / free run mode
-    if len(sys.argv) >= 2:
-        if 'start' == sys.argv[1]:
-            camera = Camera(hz, gpio_pin)
-            MyDaemon.start(camera)
-        elif 'stop' == sys.argv[1]:
-            MyDaemon.stop()
-        elif 'restart' == sys.argv[1]:
-            MyDaemon.restart()
-        else:
-            print("Unknown command")
-            sys.exit(2)
-        sys.exit(0)
-    else:
-        print("usage: %s start|stop|restart" % sys.argv[0])
-        sys.exit(2)
-        
+    if 'sync' == args.mode:
+        MyDaemon.start(camera)
+    elif 'free' == args.mode:
+        MyDaemon.stop()
+    elif 'restart' == args.mode:
+        MyDaemon.restart(camera)
+    sys.exit(0)   

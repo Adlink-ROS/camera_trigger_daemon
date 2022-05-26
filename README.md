@@ -8,15 +8,6 @@ ROScube X with mraa ⇒ GPIO ⇒ Trigger ISR + Camera
  
 # Installation
 
-## Mraa
-
-```bash
-sudo add-apt-repository ppa:mraa/mraa
-sudo apt-get update
-sudo apt-get install libmraa2 libmraa-dev libmraa-java 
-sudo apt-get install python-mraa python3-mraa node-mraa mraa-tools
-```
-
 ## Neuron Library
 
 ```bash
