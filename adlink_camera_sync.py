@@ -157,6 +157,14 @@ class daemon:
             sys.stderr.write(message.format(self.pidfile))
             sys.exit(1)
 
+        # Set the camera to frame Sync mode
+        try:
+            os.popen("echo 1 > /sys/module/leopard_ar0233/parameters/trigger_mode").readlines
+            os.popen("i2cset -f -y 2 0x66 0x04 0xff").readlines
+            print("Set to frame Sync mode")
+        except ValueError as e:
+            print(e)
+
         # Start the daemon
         self.daemonize()
         camera.run()
@@ -190,6 +198,14 @@ class daemon:
             else:
                 print(str(err.args))
                 sys.exit(1)
+
+        # Set the camera to free mode
+        try:
+            os.popen("echo 0 > /sys/module/leopard_ar0233/parameters/trigger_mode").readlines
+            os.popen("i2cset -f -y 2 0x66 0x04 0xf0").readlines
+            print("Set to free mode")
+        except ValueError as e:
+            print(e)
 
     def restart(self, camera):
         """Restart the daemon."""
