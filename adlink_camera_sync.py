@@ -1,15 +1,14 @@
 """Generic linux daemon base class for python 3.x."""
 
+import sys
+sys.path.append(
+    "/opt/adlink/neuron-sdk/neuron-library/lib/python3.6/dist-packages")
+import mraa
 import argparse
 import signal
 import atexit
 import time
 import os
-import mraa
-import sys
-sys.path.append(
-    "/opt/adlink/neuron-sdk/neuron-library/lib/python3.6/dist-packages")
-
 
 class Camera:
     def __init__(self, hz, gpio_pin=None):
@@ -17,8 +16,10 @@ class Camera:
         self.gpio_pin = gpio_pin
         self.min_fsync_interval = 0.005
         self.interval = 1 / self.hz
-        # Initialize camera list
         self.cameras = []
+
+    def run(self):
+        # Initialize camera list
         try:
             for n in range(51, 55):  # from 51 to 54
                 cam = mraa.Gpio(n)
@@ -28,11 +29,9 @@ class Camera:
                 self.cameras.append(cam)
         except ValueError as e:
             print(e)
-
-    def run(self):
-
+        
         def isr_routine(self):
-            # trigger the cameras
+            # Trigger the cameras
             for i in range(self.hz):
                 t1 = time.time()
                 for cam in self.cameras:
@@ -83,14 +82,14 @@ class daemon:
 
     Usage: subclass the daemon class and override the run() method."""
 
-    def __init__(self, pidfile,
+    def __init__(self, pidfile, camera, 
                  stdin='/dev/null', stdout='/home/ros/camera_trigger_daemon/daemon.log', stderr='/dev/null',):
         # daemon
         self.pidfile = pidfile
         self.stdin = stdin
         self.stdout = stdout
         self.stderr = stderr
-        self.pidfile = pidfile
+        self.camera = camera
 
     def daemonize(self):
         """Deamonize class. UNIX double fork mechanism."""
@@ -140,7 +139,7 @@ class daemon:
     def delpid(self):
         os.remove(self.pidfile)
 
-    def start(self, camera):
+    def start(self):
         """Start the daemon."""
 
         # Check for a pidfile to see if the daemon already runs
@@ -167,7 +166,7 @@ class daemon:
 
         # Start the daemon
         self.daemonize()
-        camera.run()
+        self.camera.run()
 
     def stop(self):
         """Stop the daemon."""
@@ -207,11 +206,11 @@ class daemon:
         except ValueError as e:
             print(e)
 
-    def restart(self, camera):
+    def restart(self):
         """Restart the daemon."""
 
         self.stop()
-        self.start(camera)
+        self.start()
 
 
 if __name__ == "__main__":
@@ -237,17 +236,17 @@ if __name__ == "__main__":
     parser.add_argument('-t', '--gpio_num', type=int, default=None,
                         required=False, help='Whether triggered by GPIO in (default None)')
     args = parser.parse_args()
-
+    
     # set daemon : pidfile, gpio_pin(isr), hz
     hz = args.freq
     gpio_pin = args.gpio_num
-    MyDaemon = daemon('/tmp/daemon-example.pid')
     camera = Camera(hz, gpio_pin)
+    MyDaemon = daemon('/tmp/daemon-example.pid', camera)
 
     if 'sync' == args.mode:
-        MyDaemon.start(camera)
+        MyDaemon.start()
     elif 'free' == args.mode:
         MyDaemon.stop()
     elif 'restart' == args.mode:
-        MyDaemon.restart(camera)
+        MyDaemon.restart()
     sys.exit(0)   
