@@ -66,7 +66,7 @@ sudo python3 adlink_camera_sync [mode] [-f freq] [-t gpio_num] [-h help]
 ```bash
 # Trigger camera directly by 5 Hz(default) without ISR.
 sudo python3 adlink_camera_sync sync
-# Oprional: trigger camera by 10 Hz with ISR (GPIO_NUM).
+# Oprional: trigger camera by 10 Hz with ISR (from GPIO_NUM 5).
 sudo python3 adlink_camera_sync sync -f 10 -t 5
 ```
 
@@ -76,19 +76,10 @@ sudo python3 adlink_camera_sync sync -f 10 -t 5
 sudo python3 adlink_camera_sync free 
 ```
 
-### Restart the daemon
+## Warning
 
 When run **Sync mode**, show the message "pidfile /tmp/daemon-example.pid already exist. Daemon already running?".
 
-That means ``pid`` of deamon already exist, you need stop the daemon by **Free mode** or use the **Restart mode**  instead of **Sync mode**.
-
-```bash
-# Trigger camera directly by 5 Hz(default) without ISR.
-sudo python3 adlink_camera_sync restart
-# Oprional: trigger camera by 10 Hz with ISR (GPIO_NUM).
-sudo python3 adlink_camera_sync restart -f 10 -t 5
-```
-
-## Warning
+That means ``pid`` of daemon already exist, you need stop the daemon by running **Free mode** first.
 
 If the daemon didn't work, please check the ``daemon.log`` file.

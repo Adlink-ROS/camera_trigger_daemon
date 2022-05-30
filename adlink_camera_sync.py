@@ -139,7 +139,7 @@ class daemon:
     def delpid(self):
         os.remove(self.pidfile)
 
-    def start(self):
+    def run_sync(self):
         """Start the daemon."""
 
         # Check for a pidfile to see if the daemon already runs
@@ -168,7 +168,7 @@ class daemon:
         self.daemonize()
         self.camera.run()
 
-    def stop(self):
+    def run_free(self):
         """Stop the daemon."""
 
         # Get the pid from the pidfile
@@ -206,13 +206,6 @@ class daemon:
         except ValueError as e:
             print(e)
 
-    def restart(self):
-        """Restart the daemon."""
-
-        self.stop()
-        self.start()
-
-
 if __name__ == "__main__":
     # Argument definition
     # ./adlink_camera_sync [mode] [-f freq] [-t gpio_num]
@@ -230,7 +223,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('mode', type=str, choices=[
-                        'sync', 'free', 'restart'], help='Camera trigger mode: frame sync / free run mode')
+                        'sync', 'free'], help='Camera trigger mode: frame sync / free run mode')
     parser.add_argument('-f', '--freq', type=int, default='5',  choices=range(1, 21), 
                         metavar="[1~20]", help='The camera trigger frequency (default 5 Hz)')
     parser.add_argument('-t', '--gpio_num', type=int, default=None,
@@ -244,9 +237,7 @@ if __name__ == "__main__":
     MyDaemon = daemon('/tmp/daemon-example.pid', camera)
 
     if 'sync' == args.mode:
-        MyDaemon.start()
+        MyDaemon.run_sync()
     elif 'free' == args.mode:
-        MyDaemon.stop()
-    elif 'restart' == args.mode:
-        MyDaemon.restart()
+        MyDaemon.run_free()
     sys.exit(0)   
