@@ -16,7 +16,7 @@ class daemon:
     Usage: subclass the daemon class and override the run() method."""
 
     def __init__(self, pidfile, gpio_pin, uart_port, hz,
-                 stdin='/dev/null', stdout='/home/ros/camera_trigger_daemon/test.txt', stderr='/dev/null',):
+                 stdin='/dev/null', stdout='/home/ros/camera_trigger_daemon/test.log', stderr='/dev/null',):
         # daemon
         self.pidfile = pidfile
         self.stdin = stdin

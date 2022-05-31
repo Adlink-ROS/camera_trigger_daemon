@@ -8,15 +8,6 @@ ROScube X with mraa ⇒ GPIO ⇒ Trigger ISR + Camera
  
 # Installation
 
-## Mraa
-
-```bash
-sudo add-apt-repository ppa:mraa/mraa
-sudo apt-get update
-sudo apt-get install libmraa2 libmraa-dev libmraa-java 
-sudo apt-get install python-mraa python3-mraa node-mraa mraa-tools
-```
-
 ## Neuron Library
 
 ```bash
@@ -41,70 +32,54 @@ cd camera_trigger_daemon/
 
 # Usage
 
-## ****Frame Sync Configuration****
+## ****Camera Sync Configuration****
 
 RQX-58G supports **Free Run Mode** and **Frame Sync Mode**.
 
 - 0 -> Free Run mode
 - 1 -> Frame Sync mode
 
-```bash
-su root
-# If you want Frame Sync mode
-echo 1 > /sys/module/leopard_ar0233/parameters/trigger_mode
-i2cset -f -y 2 0x66 0x04 0xff
-# If you want Free Run mode
-echo 0 > /sys/module/leopard_ar0233/parameters/trigger_mode
-i2cset -f -y 2 0x66 0x04 0xf0
-
-# check the Frame mode
-cat /sys/module/leopard_ar0233/parameters/trigger_mode
-```
+For more details, you can go to [Frame Synchronization](https://adlink-ros.github.io/roscube-doc/roscube-x/gmsl_camera/frame_sync.html).
 
 ## Camera Daemon
 
 We provide a daemon to trigger cameras when GPIO interrupts by external signal.
 
-The daemon provides four function:
+```bash
+sudo python3 adlink_camera_sync [mode] [-f freq] [-t gpio_num] [-h help]
+```
+* mode:
+    - sync:
+         1. set frame sync mode
+         2. enable isr if gpio_num != None
+         3. enable trigger daemon
+    - free:
+         1. disable trigger daemon
+         2. set free run mode
+* While sync mode, supports two options
+    - freq: the trigger frequency (default 5 Hz) range from 1 to 20 Hz
+    - gpio_num: whether triggered by GPIO in
+    - help: more detail about argument
 
-* Start : trigger cameras with external signal.
-* Stop : stop the daemon.
-* Restart : stop and then start.
-* Start_free : trigger cameras without external signal.
-
-Default option: 
-
-* GPIO(ISR) = 5 pin
-* trigger hz = 5 hz
-
-### To start the daemon
+### Sync mode
 
 ```bash
-sudo python3 isr_camera.py start
-# Otherwise, trigger cameras by 10 hz and setting GPIO: 6 pin to interrupt.
-sudo python3 isr_camera.py start 10 6
+# Trigger camera directly by 5 Hz(default) without ISR.
+sudo python3 adlink_camera_sync sync
+# Oprional: trigger camera by 10 Hz with ISR (from GPIO_NUM 5).
+sudo python3 adlink_camera_sync sync -f 10 -t 5
 ```
 
-### To stop the daemon
+### Free mode
 
 ```bash
-sudo python3 isr_camera.py stop
-```
-
-### To restart the daemon
-
-```bash
-sudo python3 isr_camera.py restart
-```
-
-### To start the daemon without the PPS
-
-```bash
-sudo python3 isr_camera.py start_free
-# Otherwise, trigger cameras by 10 hz.
-sudo python3 isr_camera.py start_free 10
+sudo python3 adlink_camera_sync free 
 ```
 
 ## Warning
+
+When run **Sync mode**, show the message "pidfile /tmp/daemon-example.pid already exist. Daemon already running?".
+
+That means ``pid`` of daemon already exist, you need stop the daemon by running **Free mode** first.
 
 If the daemon didn't work, please check the ``daemon.log`` file.
