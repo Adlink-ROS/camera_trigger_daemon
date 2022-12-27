@@ -16,7 +16,7 @@ sudo apt install curl
 curl -L --insecure https://neuron.adlinktech.com/debian/repo_signing.key | sudo apt-key add -
 echo 'Acquire::https::neuron.adlinktech.com::Verify-Peer "false";' | sudo tee /etc/apt/apt.conf.d/99roscube > /dev/null
 echo 'Acquire::https::neuron.adlinktech.com::Verify-Host "false";' | sudo tee -a /etc/apt/apt.conf.d/99roscube > /dev/null
-echo "deb [arch=$(dpkg --print-architecture)] https://neuron.adlinktech.com/debian/common$(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/roscube.list > /dev/null
+echo "deb [arch=$(dpkg --print-architecture)] https://neuron.adlinktech.com/debian/common $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/roscube.list > /dev/null
 sudo apt update
 
 # Install Neuron Library
