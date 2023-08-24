@@ -10,17 +10,12 @@ ROScube X with mraa ⇒ GPIO ⇒ Trigger ISR + Camera
 
 ## Neuron Library
 
-```bash
-# Setup ADLINK APT repository
-sudo apt install curl
-curl -L --insecure https://neuron.adlinktech.com/debian/repo_signing.key | sudo apt-key add -
-echo 'Acquire::https::neuron.adlinktech.com::Verify-Peer "false";' | sudo tee /etc/apt/apt.conf.d/99roscube > /dev/null
-echo 'Acquire::https::neuron.adlinktech.com::Verify-Host "false";' | sudo tee -a /etc/apt/apt.conf.d/99roscube > /dev/null
-echo "deb [arch=$(dpkg --print-architecture)] https://neuron.adlinktech.com/debian/common $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/roscube.list > /dev/null
-sudo apt update
+Download Neuron Library from the link: https://github.com/Adlink-ROS/mraa/releases
 
-# Install Neuron Library
-sudo apt install neuron-library
+And then install Neuron Library from the deb file:
+```bash
+# Example for RQX-58G
+sudo apt install neuron-library_1.3.13_arm64_ubuntu1804.deb
 ```
 
 ## Get the code
